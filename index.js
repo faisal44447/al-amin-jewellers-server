@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const { ObjectId } = require('mongodb');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
 const app = express();
@@ -21,18 +23,75 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        const staffCollection = client.db("alAminShopDb").collection("stafs");
+        const staffCollection = client.db("alAminShopDb").collection("staffs");
+        const usersCollection = client.db("alAminShopDb").collection("users");
+
+        app.post('/jwt', async (req, res) => {
+            const { email } = req.body;
+
+            const token = jwt.sign(
+                { email },
+                process.env.ACCESS_TOKEN_SECRET,
+                { expiresIn: '7d' }
+            );
+
+            res.send({ token });
+        });
+
+        // user save
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            const result = await usersCollection.insertOne(user);
+            res.send({ success: true, result });
+        });
+
+        // verify token middleware
+        const verifyToken = (req, res, next) => {
+            const authHeader = req.headers.authorization;
+
+            if (!authHeader) return res.status(401).send({ message: 'unauthorized' });
+
+            const token = authHeader.split(' ')[1];
+
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+                if (err) return res.status(403).send({ message: 'forbidden' });
+
+                req.decoded = decoded;
+                next();
+            });
+        };
 
         // স্টাফ ডাটা সেভ করা
-        app.post('/stafs', async (req, res) => {
+        app.post('/staffs', async (req, res) => {
             const item = req.body;
             const result = await staffCollection.insertOne(item);
             res.send(result);
         });
 
         // স্টাফ ডাটা গেট করা
-        app.get('/stafs', async (req, res) => {
+        app.get('/staffs', async (req, res) => {
             const result = await staffCollection.find().toArray();
+            res.send(result);
+        });
+
+        // UPDATE staff
+        app.put('/staffs/:id', async (req, res) => {
+            const id = req.params.id;
+            const updatedData = req.body;
+
+            const filter = { _id: new ObjectId(id) };
+
+            const updateDoc = {
+                $set: updatedData
+            };
+
+            const result = await staffCollection.updateOne(filter, updateDoc);
+            res.send(result);
+        });
+
+        app.get('/staffs/:id', async (req, res) => {
+            const id = req.params.id;
+            const result = await staffCollection.findOne({ _id: new ObjectId(id) });
             res.send(result);
         });
 
